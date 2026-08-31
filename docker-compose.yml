@@ -1,0 +1,63 @@
+# Локальная разработка: MariaDB со схемой opensips, backend (uvicorn --reload) и vite dev-сервер.
+# Прод разворачивается через systemd, см. README.md.
+services:
+  opensips-db:
+    image: mariadb:11
+    container_name: osips-ui-db
+    environment:
+      MARIADB_ROOT_PASSWORD: opensipsrw
+      MARIADB_DATABASE: opensips
+      MARIADB_USER: opensips
+      MARIADB_PASSWORD: opensipsrw
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/10-opensips.sql:ro
+      - ./dev/seed.sql:/docker-entrypoint-initdb.d/20-seed.sql:ro
+      - opensips-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build: ./back-osips-ui
+    container_name: osips-ui-backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      SECRET_KEY: dev-secret-key-not-for-production
+      APP_DB_PATH: /data/osips-ui.db
+      SERVE_STATIC: "false"
+      DEBUG: "true"
+      BOOTSTRAP_ADMIN_USERNAME: admin
+      BOOTSTRAP_ADMIN_PASSWORD: admin
+      CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./back-osips-ui/app:/opt/osips-ui/back-osips-ui/app:ro
+      - backend-data:/data
+    depends_on:
+      opensips-db:
+        condition: service_healthy
+
+  frontend:
+    image: node:22-alpine
+    container_name: osips-ui-frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_TARGET: http://backend:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./front-osips-ui:/app
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  opensips-db-data:
+  backend-data:
+  frontend-node-modules:
