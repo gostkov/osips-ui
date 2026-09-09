@@ -12,7 +12,7 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/10-opensips.sql:ro
+      - ./dev/init.sql:/docker-entrypoint-initdb.d/10-opensips.sql:ro
       - ./dev/seed.sql:/docker-entrypoint-initdb.d/20-seed.sql:ro
       - opensips-db-data:/var/lib/mysql
     healthcheck:

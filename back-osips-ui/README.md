@@ -7,9 +7,8 @@ Backend web-интерфейса управления OpenSIPS (FastAPI).
 Быстрый старт для разработки:
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
+poetry install                              # venv и зависимости строго по poetry.lock
 cp .env.example .env
-uvicorn app.main:app --reload --port 8000   # Swagger: http://127.0.0.1:8000/docs
-PYTHONPATH=. pytest -q                      # тесты
+poetry run uvicorn app.main:app --reload --port 8000   # Swagger: http://127.0.0.1:8000/docs
+poetry run pytest -q                        # тесты
 ```

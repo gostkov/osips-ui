@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .api import address, audit, auth, blacklist, dialplan, dispatcher, loadbalancer, roles, rtpengine, servers, sipregs, users
-from .config import settings
+from .config import settings, verify_production_secrets
 from .db.session import init_db
 from .services.mi import MIError, close_client
 from .services.opensips_db import OpensipsDBError, dispose_all
@@ -24,6 +24,7 @@ logger = logging.getLogger("osips-ui")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    verify_production_secrets()
     logger.info("Инициализация БД приложения: %s", settings.APP_DB_PATH)
     await init_db()
     yield
@@ -38,7 +39,49 @@ app = FastAPI(
     version=settings.APP_VERSION,
     root_path=settings.ROOT_PATH,
     lifespan=lifespan,
+    docs_url="/docs" if settings.DOCS_ENABLED else None,
+    redoc_url="/redoc" if settings.DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if settings.DOCS_ENABLED else None,
 )
+
+# Собранный фронтенд не тянет ничего извне, поэтому политика жёсткая.
+# 'unsafe-inline' для стилей нужен Vuetify: он расставляет style-атрибуты на элементах.
+CONTENT_SECURITY_POLICY = "; ".join(
+    (
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
+        "font-src 'self' data:",
+        "connect-src 'self'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "object-src 'none'",
+    )
+)
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+}
+# Swagger UI грузит скрипты и стили с cdn.jsdelivr.net, под нашей CSP он бы не открылся
+_NO_CSP_PATHS = ("/docs", "/redoc", "/openapi.json")
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    if not request.url.path.startswith(_NO_CSP_PATHS):
+        response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+    # HSTS имеет смысл только поверх https - за прокси об этом говорит X-Forwarded-Proto
+    if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 if settings.CORS_ORIGINS:
     app.add_middleware(
