@@ -6,7 +6,7 @@
 Везде одинаково: правка таблицы в БД плюс перезагрузка данных в память через MI.
 Разграничение доступа — по настраиваемым ролям.
 
-Проверено на схеме БД OpenSIPS **3.6** (`init.sql`).
+Проверено на схеме БД OpenSIPS **3.6** (`dev/init.sql`).
 
 ## Состав репозитория
 
@@ -14,9 +14,9 @@
 osips-ui/
 ├── back-osips-ui/      backend: Python 3.11+, FastAPI, SQLAlchemy (async), SQLite для своих данных
 ├── front-osips-ui/     frontend: Vue 3 (Composition API) + Vuetify 3 + Pinia + Vue Router, сборка Vite
+├── dev/init.sql        схема БД OpenSIPS для локального стенда
 ├── dev/seed.sql        тестовые данные для локальной разработки
-├── docker-compose.yml  локальная разработка: MariaDB + backend + vite
-└── init.sql            схема БД OpenSIPS
+└── docker-compose.yml  локальная разработка: MariaDB + backend + vite
 ```
 
 В проде **nginx не нужен**: backend сам отдаёт собранный фронтенд (`STATIC_DIR`) и API на одном порту.
@@ -228,10 +228,9 @@ Backend:
 
 ```bash
 cd back-osips-ui
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt          # или: poetry install --no-root
+poetry install                           # venv и зависимости строго по poetry.lock
 cp .env.example .env                     # правим SECRET_KEY, APP_DB_PATH, SERVE_STATIC=false
-uvicorn app.main:app --reload --port 8000
+poetry run uvicorn app.main:app --reload --port 8000
 ```
 
 Frontend (в отдельном терминале):
@@ -270,8 +269,8 @@ npm run build                     # результат в front-osips-ui/dist
 
 # 3. бэкенд
 cd /opt/osips-ui/back-osips-ui
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+pip install --user poetry                 # если poetry ещё нет
+POETRY_VIRTUALENVS_IN_PROJECT=true poetry install --only main --no-root
 cp .env.example .env
 # ОБЯЗАТЕЛЬНО:
 #   SECRET_KEY=$(openssl rand -hex 32)
@@ -298,7 +297,7 @@ journalctl -u osips-ui -f
 ```bash
 cd /opt/osips-ui && sudo -u osips-ui git pull
 cd front-osips-ui && npm ci && npm run build
-cd ../back-osips-ui && .venv/bin/pip install -r requirements.txt
+cd ../back-osips-ui && POETRY_VIRTUALENVS_IN_PROJECT=true poetry install --only main --no-root
 sudo systemctl restart osips-ui
 ```
 
@@ -385,7 +384,7 @@ sudo systemctl restart osips-ui
 
 Код проекта распространяется по лицензии [MIT](LICENSE).
 
-Файл `init.sql` — схема БД из дистрибутива [OpenSIPS](https://github.com/OpenSIPS/opensips)
+Файл `dev/init.sql` — схема БД из дистрибутива [OpenSIPS](https://github.com/OpenSIPS/opensips)
 и распространяется на условиях его собственной лицензии (GPL-2.0+). Он лежит в репозитории
 только для того, чтобы поднять локальный стенд одной командой; сам OpenSIPS в состав проекта
 не входит.
