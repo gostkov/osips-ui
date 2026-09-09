@@ -18,6 +18,10 @@
 # То же можно задать переменными окружения: INSTALL_DIR, SERVICE_USER, SERVICE_NAME,
 # LISTEN, WORKERS, POETRY_HOME, POETRY_VERSION (ключ важнее переменной).
 #
+# poetry берётся в таком порядке: уже установленный -> пакет python3-poetry из репозитория
+# дистрибутива -> venv в POETRY_HOME с версией POETRY_VERSION из PyPI. Годится только 2.x:
+# poetry.lock формата 2.1 более старые версии не читают.
+#
 # Повторный запуск = обновление: код и зависимости обновятся, .env и база останутся.
 # Если указать другой --install-dir, установка переедет: служба остановится, .env и база
 # переберутся на новое место, старый каталог останется на диске нетронутым.
@@ -31,6 +35,7 @@ LISTEN="${LISTEN:-0.0.0.0:8000}"
 WORKERS="${WORKERS:-2}"
 POETRY_HOME="${POETRY_HOME:-/opt/poetry}"
 POETRY_VERSION="${POETRY_VERSION:-2.3.2}"
+POETRY_MIN_MAJOR=2
 
 SKIP_FRONTEND=0
 WITH_SERVICE=1
@@ -168,12 +173,27 @@ fi
 
 # --- 5. poetry --------------------------------------------------------------
 
+# Порядок поиска: уже установленный poetry -> пакет дистрибутива -> venv из PyPI.
+# Годится только poetry 2.x и новее: poetry.lock формата 2.1 более старые не читают
+# (в Debian 12 это 1.3, в Ubuntu 24.04 - 1.8, а в Debian 13 и Ubuntu 26.04 уже 2.x).
+# Функции ниже отдают путь в stdout, поэтому все сообщения идут в stderr.
+
+poetry_version() { "$1" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; }
+
+poetry_is_usable() {
+    local version major
+    version="$(poetry_version "$1")"
+    [ -n "$version" ] || return 1
+    major="${version%%.*}"
+    case "$major" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$major" -ge "$POETRY_MIN_MAJOR" ]
+}
+
 find_poetry() {
     local candidate
     for candidate in "$POETRY_HOME/bin/poetry" "$(command -v poetry || true)"; do
         [ -n "$candidate" ] && [ -x "$candidate" ] || continue
-        # poetry.lock версии 2.1 читает только poetry 2.x
-        if "$candidate" --version 2>/dev/null | grep -qE 'version 2\.'; then
+        if poetry_is_usable "$candidate"; then
             printf '%s' "$candidate"
             return 0
         fi
@@ -181,14 +201,56 @@ find_poetry() {
     return 1
 }
 
-if POETRY="$(find_poetry)"; then
-    log "Использую $POETRY ($("$POETRY" --version))"
-else
-    log "Ставлю poetry $POETRY_VERSION в $POETRY_HOME"
-    python3 -m venv "$POETRY_HOME"
+apt_candidate_version() {
+    LC_ALL=C apt-cache policy "$1" 2>/dev/null | awk '/Candidate:/ {print $2}'
+}
+
+install_poetry_from_apt() {
+    command -v apt-get >/dev/null 2>&1 || return 1
+
+    local candidate major path
+    candidate="$(apt_candidate_version python3-poetry)"
+    if [ -z "$candidate" ] || [ "$candidate" = "(none)" ]; then
+        LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || return 1
+        candidate="$(apt_candidate_version python3-poetry)"
+    fi
+    [ -n "$candidate" ] && [ "$candidate" != "(none)" ] || return 1
+
+    major="${candidate%%.*}"
+    case "$major" in ''|*[!0-9]*) return 1 ;; esac
+    if [ "$major" -lt "$POETRY_MIN_MAJOR" ]; then
+        log "В репозитории дистрибутива python3-poetry $candidate - слишком старый для poetry.lock" >&2
+        return 1
+    fi
+
+    log "Ставлю python3-poetry $candidate из репозитория дистрибутива" >&2
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-poetry >/dev/null 2>&1 || return 1
+    path="$(command -v poetry || true)"
+    [ -n "$path" ] && poetry_is_usable "$path" || return 1
+    printf '%s' "$path"
+}
+
+install_poetry_from_pypi() {
+    # PEP 668: ставить pip'ом в системный python нельзя, поэтому отдельный venv
+    if ! python3 -m venv "$POETRY_HOME" >/dev/null 2>&1; then
+        if command -v apt-get >/dev/null 2>&1; then
+            log "Не собрался venv - доставляю python3-venv" >&2
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-venv >/dev/null 2>&1 || true
+        fi
+        python3 -m venv "$POETRY_HOME" || die "Не удалось создать venv в $POETRY_HOME (нужен пакет python3-venv)"
+    fi
     "$POETRY_HOME/bin/pip" install --quiet --upgrade pip
     "$POETRY_HOME/bin/pip" install --quiet "poetry==$POETRY_VERSION"
-    POETRY="$POETRY_HOME/bin/poetry"
+    printf '%s' "$POETRY_HOME/bin/poetry"
+}
+
+if POETRY="$(find_poetry)"; then
+    log "Использую $POETRY ($("$POETRY" --version))"
+elif POETRY="$(install_poetry_from_apt)"; then
+    log "Использую $POETRY ($("$POETRY" --version))"
+else
+    log "Подходящего poetry в системе и репозитории нет, ставлю $POETRY_VERSION в $POETRY_HOME"
+    POETRY="$(install_poetry_from_pypi)"
 fi
 
 # --- 6. зависимости backend -------------------------------------------------

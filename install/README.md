@@ -24,6 +24,11 @@ sudo install/install.sh
 (со случайными `SECRET_KEY` и паролем администратора), кладёт unit и запускает службу.
 Пароль первого входа печатается в конце.
 
+Сам poetry ищется по порядку: уже установленный в системе → пакет `python3-poetry` из
+репозитория дистрибутива → venv в `/opt/poetry` с версией из PyPI. Подходит только 2.x:
+`poetry.lock` формата 2.1 старые версии не читают, а их в LTS-репозиториях хватает —
+Debian 12 отдаёт 1.3, Ubuntu 24.04 — 1.8, тогда как Debian 13 и Ubuntu 26.04 уже 2.x.
+
 Unit ужесточён: каталог установки только на чтение (кроме `data/`), нет capabilities,
 `SystemCallFilter=@system-service`, доступ к сети ограничен `AF_UNIX`/`AF_INET`/`AF_INET6`,
 sysctl, cgroups, `/proc/kcore` и чужие процессы недоступны — `systemd-analyze security osips-ui`
