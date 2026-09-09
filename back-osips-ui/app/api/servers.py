@@ -9,32 +9,50 @@ from ..core.roles import Perm
 from ..db.audit import write_audit
 from ..db.models import OpensipsServer
 from ..schemas.server import ServerCheck, ServerCheckOut, ServerCreate, ServerOut, ServerUpdate
-from ..services import mi, opensips_db
+from ..services import mi, opensips_db, rbac
 
 router = APIRouter(prefix="/api/servers", tags=["servers"])
 
 SECRET_FIELDS = ("mi_password", "db_password")
 
 
-def to_out(server: OpensipsServer) -> ServerOut:
-    return ServerOut.model_validate(server, from_attributes=True).model_copy(
+def to_out(server: OpensipsServer, *, full: bool = True) -> ServerOut:
+    """full=False - только то, что нужно селектору серверов, без реквизитов инфраструктуры."""
+    out = ServerOut.model_validate(server, from_attributes=True).model_copy(
         update={
             "has_db": opensips_db.has_db(server),
             "has_mi": mi.has_mi(server),
         }
     )
+    if full:
+        return out
+    return ServerOut(
+        id=out.id,
+        name=out.name,
+        is_active=out.is_active,
+        sort_order=out.sort_order,
+        has_db=out.has_db,
+        has_mi=out.has_mi,
+    )
 
 
 @router.get("", response_model=list[ServerOut], summary="Список серверов")
-async def list_servers(session: SessionDep, _: CurrentUser, only_active: bool = False) -> list[ServerOut]:
+async def list_servers(session: SessionDep, user: CurrentUser, only_active: bool = False) -> list[ServerOut]:
+    """Без права servers:read отдаётся сокращённая карточка: id, имя, статус, признаки БД и MI."""
+    full = await rbac.has_perm(session, user.role, Perm.SERVERS_READ)
     query = select(OpensipsServer).order_by(OpensipsServer.sort_order, OpensipsServer.name)
     if only_active:
         query = query.where(OpensipsServer.is_active.is_(True))
-    return [to_out(server) for server in await session.scalars(query)]
+    return [to_out(server, full=full) for server in await session.scalars(query)]
 
 
-@router.get("/{server_id}", response_model=ServerOut, summary="Карточка сервера")
-async def get_server_detail(server: ServerDep, _: CurrentUser) -> ServerOut:
+@router.get(
+    "/{server_id}",
+    response_model=ServerOut,
+    summary="Карточка сервера",
+    dependencies=[Depends(require(Perm.SERVERS_READ))],
+)
+async def get_server_detail(server: ServerDep) -> ServerOut:
     return to_out(server)
 
 
@@ -87,8 +105,13 @@ async def delete_server(server: ServerDep, session: SessionDep, actor: CurrentUs
     return {"ok": True}
 
 
-@router.post("/{server_id}/check", response_model=ServerCheckOut, summary="Проверка доступности БД и http MI")
-async def check_server(server: ServerDep, _: CurrentUser) -> ServerCheckOut:
+@router.post(
+    "/{server_id}/check",
+    response_model=ServerCheckOut,
+    summary="Проверка доступности БД и http MI",
+    dependencies=[Depends(require(Perm.SERVERS_READ))],
+)
+async def check_server(server: ServerDep) -> ServerCheckOut:
     db_result = (
         await opensips_db.ping(server) if opensips_db.has_db(server) else {"ok": False, "detail": "подключение к БД не настроено"}
     )

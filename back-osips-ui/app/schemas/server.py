@@ -49,14 +49,37 @@ class ServerUpdate(BaseModel):
     sort_order: int | None = None
 
 
-class ServerOut(ServerBase):
+class ServerOut(BaseModel):
+    """Карточка сервера.
+
+    Селектор серверов нужен на каждой странице, поэтому список видит любой
+    аутентифицированный пользователь - но реквизиты инфраструктуры (адреса, имена БД
+    и учётные записи) приезжают только тем, у кого есть servers:read. Остальным
+    приходит null, см. to_out() в api/servers.py.
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    name: str
+    is_active: bool = True
+    sort_order: int = 100
     has_db: bool = False
     has_mi: bool = False
-    created_at: datetime
-    updated_at: datetime
+
+    description: str | None = None
+    ip_address: str | None = None
+    mi_host: str | None = None
+    mi_port: int | None = None
+    mi_path: str | None = None
+    mi_username: str | None = None
+    db_host: str | None = None
+    db_port: int | None = None
+    db_name: str | None = None
+    db_user: str | None = None
+    dispatcher_partition: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class ServerCheck(BaseModel):

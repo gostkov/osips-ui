@@ -1,0 +1,27 @@
+# Прод через Docker: один контейнер отдаёт API и фронтенд на порту 8000.
+# Базы OpenSIPS и MI - внешние, они добавляются в интерфейсе, в compose их нет.
+#
+#   cd install
+#   cp .env.docker.example .env && $EDITOR .env    # SECRET_KEY и пароль администратора
+#   docker compose -f docker-compose.prod.yml up -d --build
+services:
+  osips-ui:
+    build:
+      context: ..
+      dockerfile: install/Dockerfile
+    image: osips-ui:1.0.0
+    container_name: osips-ui
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${LISTEN_ADDR:-0.0.0.0}:${LISTEN_PORT:-8000}:8000"
+    volumes:
+      - osips-ui-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  osips-ui-data:

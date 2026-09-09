@@ -14,6 +14,7 @@
 osips-ui/
 ├── back-osips-ui/      backend: Python 3.11+, FastAPI, SQLAlchemy (async), SQLite для своих данных
 ├── front-osips-ui/     frontend: Vue 3 (Composition API) + Vuetify 3 + Pinia + Vue Router, сборка Vite
+├── install/            прод: install.sh под systemd и Dockerfile + compose для docker
 ├── dev/init.sql        схема БД OpenSIPS для локального стенда
 ├── dev/seed.sql        тестовые данные для локальной разработки
 └── docker-compose.yml  локальная разработка: MariaDB + backend + vite
@@ -247,59 +248,94 @@ npm run dev            # http://localhost:5173, /api проксируется н
 
 ```bash
 cd back-osips-ui
-PYTHONPATH=. .venv/bin/python -m pytest -q
+poetry run pytest -q
 ```
 
 ---
 
-## 4. Прод: сборка и запуск через systemd
+## 4. Прод: два способа развернуть
 
-Предполагается каталог `/opt/osips-ui`, пользователь `osips-ui`, порт `8000`.
+Оба ставят одно приложение: backend отдаёт и API, и собранный фронтенд на одном порту,
+отдельный nginx не нужен. Всё нужное лежит в каталоге [`install/`](install/).
+
+### Вариант А. systemd (`install/install.sh`)
 
 ```bash
-# 1. код
-sudo useradd -r -s /usr/sbin/nologin -d /opt/osips-ui osips-ui
-sudo mkdir -p /opt/osips-ui && sudo chown osips-ui:osips-ui /opt/osips-ui
-sudo -u osips-ui git clone <repo> /opt/osips-ui
-
-# 2. фронтенд (нужен node >= 22; можно собрать на build-хосте и скопировать dist/)
-cd /opt/osips-ui/front-osips-ui
-npm ci
-npm run build                     # результат в front-osips-ui/dist
-
-# 3. бэкенд
-cd /opt/osips-ui/back-osips-ui
-pip install --user poetry                 # если poetry ещё нет
-POETRY_VIRTUALENVS_IN_PROJECT=true poetry install --only main --no-root
-cp .env.example .env
-# ОБЯЗАТЕЛЬНО:
-#   SECRET_KEY=$(openssl rand -hex 32)
-#   BOOTSTRAP_ADMIN_PASSWORD=<надёжный пароль>
-#   STATIC_DIR=/opt/osips-ui/front-osips-ui/dist
-#   APP_DB_PATH=/opt/osips-ui/back-osips-ui/data/osips-ui.db
-mkdir -p data
-sudo chown -R osips-ui:osips-ui /opt/osips-ui
-
-# 4. служба
-sudo cp deploy/osips-ui.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now osips-ui
-sudo systemctl status osips-ui
-journalctl -u osips-ui -f
+git clone git@github.com:gostkov/osips-ui.git && cd osips-ui
+sudo install/install.sh
 ```
+
+Скрипт делает всё сам: создаёт системного пользователя `osips-ui`, копирует код в
+`/opt/osips-ui`, ставит poetry (если его нет) и зависимости строго по `poetry.lock`,
+собирает фронтенд, генерирует `.env` со случайными `SECRET_KEY` и паролем администратора,
+кладёт unit-файл, запускает службу и дожидается ответа `/api/health`. Пароль первого
+входа печатается в конце.
+
+```bash
+sudo install/install.sh --install-dir /srv/osips-ui --listen 127.0.0.1:8080 --workers 4
+sudo install/install.sh --skip-frontend    # dist собран заранее, node на хосте не нужен
+sudo install/install.sh --no-service       # только разложить файлы, systemd не трогать
+```
+
+| Ключ | Что задаёт | По умолчанию |
+|---|---|---|
+| `-d`, `--install-dir` | каталог установки | `/opt/osips-ui` |
+| `-u`, `--user` | системный пользователь службы | `osips-ui` |
+| `-n`, `--service-name` | имя службы systemd | `osips-ui` |
+| `-l`, `--listen` | адрес и порт gunicorn | `0.0.0.0:8000` |
+| `-w`, `--workers` | число воркеров | `2` |
+
+То же можно задать переменными окружения (`INSTALL_DIR`, `SERVICE_USER`, `SERVICE_NAME`,
+`LISTEN`, `WORKERS`, `POETRY_HOME`, `POETRY_VERSION`) — ключ важнее переменной.
+
+**Смена каталога установки.** Если указать `--install-dir`, отличающийся от текущего,
+скрипт увидит прежний путь в unit-файле, остановит службу, перенесёт `.env` и базу
+приложения на новое место, поправит в `.env` пути, ведшие в старый каталог, и запустит
+службу оттуда. Старый каталог остаётся на диске — удалите его сами, когда убедитесь,
+что всё работает. Ключи `--listen` и `--workers`, заданные явно, применяются и к уже
+существующему `.env`; остальные его значения не трогаются.
+
+Unit-файл ужесточён штатными средствами systemd: каталог установки только на чтение
+(писать можно лишь в `data/`), пустой `CapabilityBoundingSet`, `SystemCallFilter=@system-service`,
+`RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, закрытые `/proc/kcore`, sysctl и cgroups,
+чужие процессы не видны. `systemd-analyze security osips-ui` даёт 1.5 (OK).
+
+Обновление — тот же скрипт: код и зависимости обновятся, `.env` и база приложения
+останутся нетронутыми.
+
+```bash
+cd /path/to/repo && git pull && sudo install/install.sh
+```
+
+Снять службу: `sudo install/uninstall.sh` (файлы и база остаются) либо
+`sudo install/uninstall.sh --purge` (удаляет каталог установки, базу и пользователя).
+
+### Вариант Б. Docker (`install/docker-compose.prod.yml`)
+
+```bash
+cd install
+cp .env.docker.example .env
+$EDITOR .env                      # SECRET_KEY (openssl rand -hex 32) и BOOTSTRAP_ADMIN_PASSWORD
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Образ (`install/Dockerfile`) собирается в три этапа: node собирает фронтенд, poetry ставит
+зависимости по `poetry.lock` в отдельный venv, в рантайм едут только venv, `app/` и `dist/`.
+Процесс работает от непривилегированного пользователя, поднят healthcheck по `/api/health`.
+База приложения лежит в томе `osips-ui-data` и переживает пересоздание контейнера.
+
+Обновление: `git pull && docker compose -f docker-compose.prod.yml up -d --build`.
+
+Баз OpenSIPS в этом compose нет: серверы добавляются в интерфейсе, контейнеру нужен лишь
+сетевой доступ до их MySQL/MariaDB и http MI.
+
+### После установки
 
 Интерфейс: `http://<host>:8000/`, Swagger: `http://<host>:8000/docs`.
-Первый вход — логин/пароль из `BOOTSTRAP_ADMIN_*`; пользователь создаётся только когда таблица
-`users` пуста. **Сразу смените пароль** в разделе «Профиль».
+Первый вход — логин и пароль из `BOOTSTRAP_ADMIN_*`; пользователь создаётся только пока
+таблица `users` пуста. **Сразу смените пароль** в разделе «Профиль».
 
-### Обновление версии
-
-```bash
-cd /opt/osips-ui && sudo -u osips-ui git pull
-cd front-osips-ui && npm ci && npm run build
-cd ../back-osips-ui && POETRY_VIRTUALENVS_IN_PROJECT=true poetry install --only main --no-root
-sudo systemctl restart osips-ui
-```
+Логи: `journalctl -u osips-ui -f` (вариант А) или `docker compose -f docker-compose.prod.yml logs -f` (вариант Б).
 
 ### Если нужен HTTPS
 
@@ -317,6 +353,7 @@ sudo systemctl restart osips-ui
 | `RBAC_CACHE_TTL` | `5` | Сколько секунд воркер держит матрицу прав в памяти |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `720` | Время жизни токена |
 | `APP_DB_PATH` | `back-osips-ui/data/osips-ui.db` | SQLite приложения |
+| `APP_DB_TIMEOUT` | `30` | Сколько секунд ждать снятия блокировки SQLite |
 | `BOOTSTRAP_ADMIN_USERNAME` / `_PASSWORD` | `admin` / `admin` | Первый администратор |
 | `STATIC_DIR` | `../front-osips-ui/dist` | Каталог собранного фронтенда |
 | `SERVE_STATIC` | `true` | Отдавать ли статику из backend |
@@ -327,7 +364,8 @@ sudo systemctl restart osips-ui
 | `DIALPLAN_PAGE_SIZE` | `25` | Записей на странице dialplan |
 | `BLACKLIST_PAGE_SIZE` | `25` | Записей на странице списков номеров |
 | `SIPREGS_PAGE_SIZE` | `25` | Записей на странице SIP-регистраций |
-| `DEBUG` | `false` | Подробный лог и SQL-echo |
+| `DOCS_ENABLED` | `true` | Отдавать ли `/docs`, `/redoc` и `/openapi.json` (без авторизации) |
+| `DEBUG` | `false` | Подробный лог и SQL-echo. При `false` приложение откажется стартовать с `SECRET_KEY` из `.env.example` и не заведёт администратора с паролем `admin` |
 | `GUNICORN_LISTEN` / `_WORKERS` / `_LOGLEVEL` | `0.0.0.0:8000` / `2` / `info` | Параметры gunicorn |
 
 ---

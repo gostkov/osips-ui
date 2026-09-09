@@ -8,19 +8,22 @@ requires-python = ">=3.11,<3.15"
 # Версии зафиксированы по минорной ветке (~=), точные версии - в poetry.lock.
 # Обновление: poetry update <пакет> либо правка ограничения + poetry lock.
 dependencies = [
-    "fastapi~=0.115.14",
+    "fastapi~=0.141.1",
+    # starlette тянется фастапи без верхней границы, но нам важен нижний порог:
+    # в <0.49 DoS через заголовок Range в FileResponse (GHSA-7f5h-v6xp-fcq8), а им раздаётся SPA
+    "starlette~=1.6.0",
     "uvicorn~=0.52.4",
-    "gunicorn~=23.0.0",
-    "pydantic~=2.13.4",
+    "gunicorn~=26.2.0",
+    "pydantic~=2.13.5",
     "pydantic-settings~=2.15.0",
     "sqlalchemy~=2.0.52",
-    "aiosqlite~=0.20.0",
-    "aiomysql~=0.2.0",
+    "aiosqlite~=0.22.1",
+    "aiomysql~=0.3.2",
     "pymysql~=1.2.0",
     "httpx~=0.28.1",
     "pyjwt~=2.13.0",
     "bcrypt~=5.0.0",
-    "cryptography~=43.0.3",
+    "cryptography~=50.0.1",
     "python-multipart~=0.0.32",
 ]
 
@@ -28,9 +31,9 @@ dependencies = [
 package-mode = false
 
 [tool.poetry.group.dev.dependencies]
-pytest = "~8.4.2"
+pytest = "~9.0.3"
 pytest-asyncio = "~1.4.0"
-pytest-cov = "~6.0.0"
+pytest-cov = "~7.1.0"
 
 [tool.black]
 line-length = 140

@@ -1,0 +1,12 @@
+.git
+.gitignore
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+back-osips-ui/.venv
+back-osips-ui/data
+back-osips-ui/.env
+front-osips-ui/dist
+dev
+init.sql
+README.md

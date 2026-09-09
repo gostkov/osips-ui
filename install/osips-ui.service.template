@@ -1,0 +1,63 @@
+# Шаблон unit-файла. Плейсхолдеры подставляет install/install.sh,
+# готовый файл кладётся в /etc/systemd/system/__SERVICE_NAME__.service.
+[Unit]
+Description=osips-ui: web-интерфейс управления OpenSIPS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=__SERVICE_USER__
+Group=__SERVICE_USER__
+WorkingDirectory=__INSTALL_DIR__/back-osips-ui
+Environment=PYTHONUNBUFFERED=1
+# каталог установки только на чтение, писать .pyc некуда и не нужно
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=__INSTALL_DIR__/back-osips-ui/.venv/bin/gunicorn -c gunicorn_conf.py app.main:app
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=5
+
+# Ужесточение. Служба ходит по сети (http MI и БД opensips), пишет только в свой data/
+# и больше не делает ничего - поэтому почти всё остальное можно отобрать.
+# Проверять после правок: systemd-analyze security __SERVICE_NAME__
+
+# файловая система: всё только на чтение, кроме SQLite приложения
+ProtectSystem=strict
+ReadWritePaths=__INSTALL_DIR__/back-osips-ui/data
+ProtectHome=true
+PrivateTmp=true
+UMask=0077
+
+# привилегии
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+
+# ядро и устройства
+PrivateDevices=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+
+# чужие процессы не видны
+ProtectProc=invisible
+ProcSubset=pid
+
+# сеть: unix-сокеты, IPv4 и IPv6 - остальные семейства не нужны
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+# системные вызовы: типовой набор для сетевой службы
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target
