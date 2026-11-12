@@ -42,7 +42,7 @@ async def _issue_token(session: SessionDep, user: User, client_ip: str | None) -
     await session.commit()
     await write_audit(session, user=user, action="auth.login", client_ip=client_ip)
     return TokenOut(
-        access_token=create_access_token(user.username, user.role),
+        access_token=create_access_token(user.auth_id, user.role),
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user=await _me(session, user),
     )

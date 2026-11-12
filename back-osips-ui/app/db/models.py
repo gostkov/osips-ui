@@ -1,6 +1,7 @@
 """Модели БД приложения (SQLite). К схеме opensips отношения не имеют."""
 
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -18,6 +19,8 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Не переиспользуется после удаления пользователя, в отличие от SQLite id и логина.
+    auth_id: Mapped[str] = mapped_column(String(32), default=lambda: uuid4().hex, unique=True, index=True, nullable=False)
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     full_name: Mapped[str | None] = mapped_column(String(128))
     email: Mapped[str | None] = mapped_column(String(128))

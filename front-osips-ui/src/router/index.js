@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { canAccessRoute } from '@/router/access'
 
 const routes = [
   {
@@ -14,18 +15,13 @@ const routes = [
     children: [
       {
         path: '',
-        redirect: () => {
-          const auth = useAuthStore()
-          if (auth.can('dispatcher:read')) return '/dispatcher'
-          if (auth.can('dialplan:read')) return '/dialplan'
-          return '/sip-regs'
-        },
+        name: 'home',
       },
       {
         path: 'dispatcher',
         name: 'dispatcher',
         component: () => import('@/views/DispatcherView.vue'),
-        meta: { title: 'Распределение вызовов', icon: 'mdi-call-split', permission: 'dispatcher:read', nav: true },
+        meta: { title: 'Распределение вызовов', icon: 'mdi-call-split', permissionsAny: ['dispatcher:read', 'lb:read'], nav: true },
       },
       {
         path: 'dialplan',
@@ -114,8 +110,9 @@ router.beforeEach(async (to) => {
     }
   }
 
-  if (to.meta.permission && !auth.can(to.meta.permission)) {
-    return { path: '/' }
+  if (to.name === 'home' || !canAccessRoute(auth, to.meta)) {
+    const first = routes[1].children.find((item) => item.meta?.nav && canAccessRoute(auth, item.meta))
+    return { path: first ? `/${first.path}` : '/profile' }
   }
   return true
 })

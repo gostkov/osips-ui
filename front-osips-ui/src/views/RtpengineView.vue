@@ -27,7 +27,8 @@ const confirmDelete = ref(false)
 const rowToDelete = ref(null)
 const softReload = ref(true)
 
-const serverId = computed(() => servers.selectedId)
+// AppLayout пересоздаёт страницу при смене сервера; текущий экземпляр всегда работает с одним сервером.
+const serverId = ref(servers.selectedId)
 const canWrite = computed(() => auth.can('rtpengine:write'))
 
 const headers = [

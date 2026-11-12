@@ -1,8 +1,22 @@
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from .role import SLUG_PATTERN
+
+
+def _check_password_bytes(value: str) -> str:
+    if len(value.encode("utf-8")) > 72:
+        raise ValueError("Пароль должен занимать не более 72 байт в UTF-8")
+    return value
+
+
+NewPassword = Annotated[
+    str,
+    Field(min_length=8, max_length=72, description="От 8 символов, не более 72 байт в UTF-8"),
+    AfterValidator(_check_password_bytes),
+]
 
 
 class UserBase(BaseModel):
@@ -14,7 +28,7 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str = Field(min_length=8, max_length=128)
+    password: NewPassword
 
 
 class UserUpdate(BaseModel):
@@ -22,7 +36,7 @@ class UserUpdate(BaseModel):
     email: str | None = Field(default=None, max_length=128)
     role: str | None = Field(default=None, pattern=SLUG_PATTERN)
     is_active: bool | None = None
-    password: str | None = Field(default=None, min_length=8, max_length=128)
+    password: NewPassword | None = None
 
 
 class UserOut(UserBase):
@@ -52,4 +66,4 @@ class TokenOut(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str = Field(min_length=8, max_length=128)
+    new_password: NewPassword

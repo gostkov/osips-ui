@@ -323,17 +323,17 @@ chmod 600 "$ENV_FILE"          # в .env лежит SECRET_KEY, которым �
 
 # --- 10. systemd -------------------------------------------------------------
 
+if [ "$WITH_SERVICE" -eq 0 ]; then
+    log "Готово (--no-service): unit-файл и состояние службы не изменены"
+    exit 0
+fi
+
 log "Ставлю unit $UNIT_FILE"
 sed -e "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
     -e "s|__SERVICE_USER__|$SERVICE_USER|g" \
     -e "s|__SERVICE_NAME__|$SERVICE_NAME|g" \
     "$INSTALL_DIR/install/osips-ui.service.template" > "$UNIT_FILE"
 chmod 644 "$UNIT_FILE"
-
-if [ "$WITH_SERVICE" -eq 0 ]; then
-    log "Готово (--no-service): служба не запускалась"
-    exit 0
-fi
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true

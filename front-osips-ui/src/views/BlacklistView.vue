@@ -28,7 +28,8 @@ const editing = ref(null)
 const confirmDelete = ref(false)
 const rowToDelete = ref(null)
 
-const serverId = computed(() => servers.selectedId)
+// AppLayout пересоздаёт страницу при смене сервера; текущий экземпляр всегда работает с одним сервером.
+const serverId = ref(servers.selectedId)
 const canWrite = computed(() => auth.can('blacklist:write'))
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PER_PAGE)))
 const isUser = computed(() => kind.value === 'user')
