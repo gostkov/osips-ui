@@ -23,6 +23,7 @@ def create_access_token(subject: str, role: str, expires_minutes: int | None = N
     expire = datetime.now(UTC) + timedelta(minutes=expires_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": subject,
+        "ver": 2,  # sub — постоянный auth_id учётной записи, а не логин
         "role": role,
         "exp": expire,
         "iat": datetime.now(UTC),

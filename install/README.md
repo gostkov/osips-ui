@@ -12,6 +12,14 @@
 | `docker-compose.prod.yml` | запуск этого образа |
 | `.env.docker.example` | переменные для compose, копируется в `install/.env` |
 
+Gunicorn использует `uvicorn_worker.UvicornWorker` из пакета `uvicorn-worker`.
+Control socket отключён в `back-osips-ui/gunicorn_conf.py`: управление выполняется
+через systemd/Docker и сигналы, запись в `$HOME/.gunicorn` не требуется.
+
+При обновлении с токенов, привязанных к логину, первый запуск автоматически добавляет
+существующим пользователям постоянный `auth_id`. Логины, пароли и роли сохраняются;
+старые токены перестают действовать, пользователям потребуется войти заново.
+
 ## Вариант А. systemd
 
 ```bash
@@ -42,6 +50,10 @@ sudo install/install.sh --skip-frontend           # dist собран заран
 sudo install/install.sh --no-service              # только разложить файлы, systemd не трогать
 sudo install/install.sh --help                    # все ключи
 ```
+
+`--no-service` обновляет файлы и зависимости приложения, но не создаёт и не меняет
+unit-файл, не вызывает `systemctl`. Существующий unit можно использовать для поиска
+прежнего каталога и переноса настроек; работающая служба при этом не останавливается.
 
 Ключи: `-d/--install-dir`, `-u/--user`, `-n/--service-name`, `-l/--listen`, `-w/--workers`,
 `--skip-frontend`, `--no-service`. Те же значения читаются из переменных окружения

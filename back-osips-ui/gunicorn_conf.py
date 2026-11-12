@@ -18,7 +18,9 @@ settings = GunicornSettings()
 
 bind = settings.GUNICORN_LISTEN
 workers = settings.GUNICORN_WORKERS
-worker_class = "uvicorn.workers.UvicornWorker"
+worker_class = "uvicorn_worker.UvicornWorker"
+# Управление идёт через systemd/Docker и сигналы; отдельный control socket не нужен.
+control_socket_disable = True
 loglevel = settings.GUNICORN_LOGLEVEL
 timeout = settings.GUNICORN_TIMEOUT
 accesslog = "-"

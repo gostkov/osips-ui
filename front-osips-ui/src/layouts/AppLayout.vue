@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useServersStore } from '@/stores/servers'
 import { useUiStore } from '@/stores/ui'
+import { canAccessRoute } from '@/router/access'
 
 const auth = useAuthStore()
 const servers = useServersStore()
@@ -16,7 +17,7 @@ const drawer = ref(true)
 const navItems = computed(() =>
   router
     .getRoutes()
-    .filter((item) => item.meta?.nav && auth.can(item.meta.permission))
+    .filter((item) => item.meta?.nav && canAccessRoute(auth, item.meta))
     .map((item) => ({ to: item.path, title: item.meta.title, icon: item.meta.icon })),
 )
 
@@ -108,7 +109,9 @@ function logout() {
         <template v-else> Обратитесь к администратору системы.</template>
       </v-alert>
 
-      <router-view v-else />
+      <!-- Новый экземпляр страницы сбрасывает строки и диалоги при смене сервера.
+           Поздние ответы остаются в размонтированном экземпляре. -->
+      <router-view v-else :key="serverAware ? `${route.name}:${servers.selectedId}` : route.name" />
     </v-container>
   </v-main>
 </template>

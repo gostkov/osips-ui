@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import { passwordByteLimit } from '@/utils/password'
 import { authApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
@@ -14,6 +15,7 @@ const saving = ref(false)
 const rules = {
   required: [(value) => Boolean(value) || 'Обязательное поле'],
   password: [
+    passwordByteLimit,
     (value) => Boolean(value) || 'Обязательное поле',
     (value) => String(value || '').length >= 8 || 'Минимум 8 символов',
   ],

@@ -25,7 +25,8 @@ const editing = ref(null)
 const confirmDelete = ref(false)
 const rowToDelete = ref(null)
 
-const serverId = computed(() => servers.selectedId)
+// AppLayout пересоздаёт страницу при смене сервера; текущий экземпляр всегда работает с одним сервером.
+const serverId = ref(servers.selectedId)
 const canWrite = computed(() => auth.can('address:write'))
 // строки таблицы, которых ещё нет в памяти opensips: нужен address_reload
 const pending = computed(() => rows.value.filter((row) => row.in_memory === false).length)

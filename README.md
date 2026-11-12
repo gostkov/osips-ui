@@ -270,6 +270,13 @@ cd back-osips-ui
 poetry run pytest -q
 ```
 
+Frontend (из корня репозитория):
+
+```bash
+cd front-osips-ui
+npm test
+```
+
 ---
 
 ## 4. Прод: два способа развернуть

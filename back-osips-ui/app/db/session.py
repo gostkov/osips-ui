@@ -5,6 +5,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import contextmanager
 from pathlib import Path
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -82,6 +83,15 @@ async def _init_db() -> None:
         # WAL заметно снижает шанс "database is locked" при нескольких воркерах
         await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
         await conn.run_sync(Base.metadata.create_all)
+        # create_all не добавляет колонки в существующие таблицы. Миграция идёт
+        # под общей init-блокировкой и сохраняет auth_id при следующих запусках.
+        columns = await conn.exec_driver_sql("PRAGMA table_info(users)")
+        if "auth_id" not in {row[1] for row in columns}:
+            await conn.exec_driver_sql("ALTER TABLE users ADD COLUMN auth_id VARCHAR(32) NOT NULL DEFAULT ''")
+        missing = await conn.exec_driver_sql("SELECT id FROM users WHERE auth_id = ''")
+        for (user_id,) in missing.fetchall():
+            await conn.exec_driver_sql("UPDATE users SET auth_id = ? WHERE id = ?", (uuid4().hex, user_id))
+        await conn.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_auth_id ON users (auth_id)")
 
     async with SessionLocal() as session:
         await _seed_roles(session)

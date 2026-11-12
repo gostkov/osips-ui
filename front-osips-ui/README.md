@@ -8,6 +8,7 @@ Frontend web-интерфейса управления OpenSIPS: Vue 3 + Vuetify
 npm install
 npm run dev      # http://localhost:5173, /api проксируется на http://127.0.0.1:8000
 npm run build    # прод-сборка в dist/, её отдаёт backend (STATIC_DIR)
+npm test         # регрессионные тесты Vue-компонентов через встроенный node:test
 ```
 
 Структура `src/`:
@@ -20,3 +21,6 @@ npm run build    # прод-сборка в dist/, её отдаёт backend (ST
 | `layouts/` | каркас с меню и выбором сервера |
 | `views/` | страницы разделов |
 | `components/` | таблицы dispatcher/LB, диалоги, switcher состояния ноды |
+
+Тесты в `tests/` проверяют смену сервера, запоздалые ответы API и сброс диалогов.
+Компоненты выполняются через Vue renderer без браузера; API и Vuetify заменены тестовыми заглушками.

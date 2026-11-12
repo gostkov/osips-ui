@@ -35,7 +35,8 @@ const translateForm = ref({ dpid: null, value: '' })
 const translateResult = ref(null)
 const translating = ref(false)
 
-const serverId = computed(() => servers.selectedId)
+// AppLayout пересоздаёт страницу при смене сервера; текущий экземпляр всегда работает с одним сервером.
+const serverId = ref(servers.selectedId)
 const canWrite = computed(() => auth.can('dialplan:write'))
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PER_PAGE)))
 

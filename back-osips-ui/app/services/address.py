@@ -89,7 +89,10 @@ async def list_addresses(server: OpensipsServer) -> dict[str, Any]:
         key = _key(row["grp"], row["ip"], row["mask"], row["port"], row["proto"])
         seen.add(key)
         runtime = entries.get(key)
-        row["in_memory"] = None if mi_error else runtime is not None
+        row["in_memory"] = None if mi_error else (
+            runtime is not None
+            and all((row.get(field) or None) == (runtime.get(field) or None) for field in ("pattern", "context_info"))
+        )
         row["partition"] = runtime.get("partition") if runtime else None
 
     memory_only = [entry for key, entry in entries.items() if key not in seen]

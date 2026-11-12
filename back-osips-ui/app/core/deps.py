@@ -14,7 +14,7 @@ from ..services import rbac
 from .roles import Perm
 from .security import decode_access_token
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token")
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
@@ -30,11 +30,11 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], sessio
     except jwt.PyJWTError as exc:
         raise credentials_error from exc
 
-    username = payload.get("sub")
-    if not username:
+    auth_id = payload.get("sub")
+    if payload.get("ver") != 2 or not auth_id:
         raise credentials_error
 
-    user = await session.scalar(select(User).where(User.username == username))
+    user = await session.scalar(select(User).where(User.auth_id == auth_id))
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Пользователь заблокирован или удалён")
     return user

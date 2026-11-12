@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { passwordByteLimit } from '@/utils/password'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -26,6 +27,7 @@ const rules = {
   ],
   role: [(value) => Boolean(value) || 'Выберите роль'],
   password: [
+    passwordByteLimit,
     (value) => (props.user ? true : Boolean(value)) || 'Обязательное поле',
     (value) => !value || String(value).length >= 8 || 'Минимум 8 символов',
   ],

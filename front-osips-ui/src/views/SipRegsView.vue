@@ -21,7 +21,8 @@ const loading = ref(false)
 const failed = ref(false)
 const expanded = ref(new Set())
 
-const serverId = computed(() => servers.selectedId)
+// AppLayout пересоздаёт страницу при смене сервера; текущий экземпляр всегда работает с одним сервером.
+const serverId = ref(servers.selectedId)
 const server = computed(() => servers.selected)
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PER_PAGE)))
 const fromMi = computed(() => source.value === 'mi')
